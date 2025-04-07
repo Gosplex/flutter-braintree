@@ -3,9 +3,6 @@ package com.example.flutter_braintree;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-
-
-
 import java.util.Map;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
@@ -15,7 +12,6 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener;
 
 public class FlutterBraintreePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, ActivityResultListener {
@@ -23,10 +19,19 @@ public class FlutterBraintreePlugin implements FlutterPlugin, ActivityAware, Met
 
   private Activity activity;
   private Result activeResult;
-
+  private MethodChannel channel;
   private FlutterBraintreeDropIn dropIn;
+  private ActivityPluginBinding activityBinding;
 
-  public static void registerWith(Registrar registrar) {
+  // This static function is optional and equivalent to onAttachedToEngine. It supports the old
+  // pre-Flutter-1.12 Android projects. You are encouraged to continue supporting
+  // plugin registration via this function while apps migrate to use the new Android APIs
+  // post-flutter-1.12 via https://flutter.dev/go/android-project-migration.
+  //
+  // It's encouraged to share logic between onAttachedToEngine and registerWith to keep
+  // them functionally equivalent. Only one of onAttachedToEngine or registerWith will be called
+  // depending on the user's project.
+  public static void registerWith(io.flutter.plugin.common.PluginRegistry.Registrar registrar) {
     FlutterBraintreeDropIn.registerWith(registrar);
     final MethodChannel channel = new MethodChannel(registrar.messenger(), "flutter_braintree.custom");
     FlutterBraintreePlugin plugin = new FlutterBraintreePlugin();
@@ -37,7 +42,7 @@ public class FlutterBraintreePlugin implements FlutterPlugin, ActivityAware, Met
 
   @Override
   public void onAttachedToEngine(FlutterPluginBinding binding) {
-    final MethodChannel channel = new MethodChannel(binding.getBinaryMessenger(), "flutter_braintree.custom");
+    channel = new MethodChannel(binding.getBinaryMessenger(), "flutter_braintree.custom");
     channel.setMethodCallHandler(this);
 
     dropIn = new FlutterBraintreeDropIn();
@@ -46,34 +51,46 @@ public class FlutterBraintreePlugin implements FlutterPlugin, ActivityAware, Met
 
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
-    dropIn.onDetachedFromEngine(binding);
-    dropIn = null;
+    if (channel != null) {
+      channel.setMethodCallHandler(null);
+      channel = null;
+    }
+    if (dropIn != null) {
+      dropIn.onDetachedFromEngine(binding);
+      dropIn = null;
+    }
   }
 
   @Override
   public void onAttachedToActivity(ActivityPluginBinding binding) {
     activity = binding.getActivity();
     binding.addActivityResultListener(this);
-    dropIn.onAttachedToActivity(binding);
+    if (dropIn != null) {
+      dropIn.onAttachedToActivity(binding);
+    }
+    activityBinding = binding;
   }
 
   @Override
   public void onDetachedFromActivityForConfigChanges() {
-    activity = null;
-    dropIn.onDetachedFromActivity();
+    onDetachedFromActivity();
   }
 
   @Override
   public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
-    activity = binding.getActivity();
-    binding.addActivityResultListener(this);
-    dropIn.onReattachedToActivityForConfigChanges(binding);
+    onAttachedToActivity(binding);
   }
 
   @Override
   public void onDetachedFromActivity() {
+    if (activityBinding != null) {
+      activityBinding.removeActivityResultListener(this);
+      activityBinding = null;
+    }
+    if (dropIn != null) {
+      dropIn.onDetachedFromActivity();
+    }
     activity = null;
-    dropIn.onDetachedFromActivity();
   }
 
   @Override
